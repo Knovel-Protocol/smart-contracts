@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-contract PublishRegistry {
+contract PublishRegistry{
 
   mapping(address => uint) public balances;
 
@@ -12,7 +12,7 @@ contract PublishRegistry {
     address author_addr;
     string ipfsHash; 
     uint256 timestamp;
-    uint price;         // 0 if free
+    uint price;        
   }
 
   mapping(bytes32 => Book) public books; 
@@ -20,6 +20,7 @@ contract PublishRegistry {
   mapping(bytes32 => mapping(address => bool)) public purchasers; 
 
   event BookRegistered(bytes32 indexed bookId, string title, string author, address author_addr, string ipfsHash, uint price); 
+  event BookUpdated(bytes32 indexed bookId, string newTitle, string newIpfsHash, uint newPrice);
 
   /**
     @notice Registers the book information on the blockchain
@@ -105,6 +106,44 @@ contract PublishRegistry {
    */
   function checkPurchaser(bytes32 _bookId, address user) external view returns(bool){
     return purchasers[_bookId][user];
+  }
+
+  /**
+    @notice To delete the book info
+    @param _bookId: bookId
+  */
+  function deleteBook(bytes32 _bookId) external {
+    require(bookOwners[_bookId] != address(0), "Book owner does not exist");
+    require(bookOwners[_bookId] == msg.sender, "Only author is authorized to delete this book");
+
+    delete books[_bookId]; 
+    delete bookOwners[_bookId];
+
+  }
+
+  /**
+    @notice To update the book information 
+    @param _bookId: bookId
+    @param _newTitle: the updated title of the book being passed
+    @param _newIpfsHash: the updated ipfsHash of the book
+  */
+  function updateBookInfo(
+    bytes32 _bookId,
+    string memory _newTitle, 
+    string memory _newIpfsHash, 
+    uint _newPrice
+  ) external{
+      require(bookOwners[_bookId] != address(0), "Book owner does not exist");
+      require(bookOwners[_bookId] == msg.sender, "Only the author can update the book");
+      require(bytes(_newTitle).length > 0, "Title cannot be empty");
+      require(bytes(_newIpfsHash).length > 0, "IPFS Hash cannot be empty");
+
+      Book memory book = books[_bookId];
+      book.title = _newTitle;
+      book.ipfsHash = _newIpfsHash;
+      book.price = _newPrice;
+
+      emit BookUpdated(_bookId, _newTitle, _newIpfsHash, _newPrice);
   }
 
 }
