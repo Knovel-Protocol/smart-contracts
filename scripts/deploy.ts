@@ -8,9 +8,6 @@ async function main() {
   const publishContract = await hre.viem.deployContract("PublishRegistry");
   console.log("Deployed to:", publishContract.address);
 
-  // const proxyContract = await hre.viem.deployContract("Proxy", [publishContract.address]);
-  // console.log("Deployed proxy contract to:", proxyContract.address);
-
 }
 
 main()

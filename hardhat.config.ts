@@ -17,12 +17,26 @@ const config: HardhatUserConfig = {
       url: `https://rpc-campnetwork.xyz`,
       accounts: [process.env.PRIVATE_KEY ?? ''], 
       chainId: 325000
-    }
+    },
+    'camp-network-testnet': {
+      url: 'https://rpc.camp-network-testnet.gelato.digital'
+    },
   },
   etherscan: {
     apiKey: {
       arbitrumSepolia: process.env.ARBISCAN_API_KEY ?? '', // Replace with your Arbiscan API key
+      'camp-network-testnet': 'empty'
     },
+    customChains: [
+      {
+        network: "camp-network-testnet",
+        chainId: 325000,
+        urls: {
+          apiURL: "https://camp-network-testnet.blockscout.com/api",
+          browserURL: "https://camp-network-testnet.blockscout.com"
+        }
+      }
+    ]
   },
   sourcify: {
     enabled: true
