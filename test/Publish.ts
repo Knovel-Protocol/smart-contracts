@@ -10,7 +10,7 @@ describe("Publish", function() {
   async function deployPublish() {
 
     // Contracts are deployed using the first signer/account by default
-    const [owner, otherAccount] = await hre.viem.getWalletClients();
+    const [owner, otherAccount, thirdAccount] = await hre.viem.getWalletClients();
 
     const publish = await hre.viem.deployContract("PublishRegistry");
     const publicClient = await hre.viem.getPublicClient();
@@ -25,22 +25,25 @@ describe("Publish", function() {
       publish,
       owner,
       otherAccount,
+      thirdAccount,
       publicClient,
     };
   }
 
   describe("Deployment", function () {
     it("User should publish a book", async function() {
-      const { publish, owner } = await loadFixture(deployPublish);
+      const { publish, otherAccount } = await loadFixture(deployPublish);
+
+      const author_addr = getAddress(otherAccount.account.address);
 
       // Calls function publishBook
-      await publish.write.publishBook(["Twilight", "Stephenie Meyers", "22r023r2", parseEther("1")]);
+      await publish.write.publishBook(["Twilight", "Stephenie Meyers", "22r023r2", author_addr, parseEther("1")]);
 
       // get the BookRegistered event in the latest block
       const BookRegistered = await publish.getEvents.BookRegistered();
 
       expect(BookRegistered).to.have.lengthOf(1);
-      expect(BookRegistered[0].args.author_addr).to.equal(getAddress(owner.account.address));
+      expect(BookRegistered[0].args.author_addr).to.equal(author_addr);
 
       const bookId = BookRegistered[0].args.bookId;
       if (!bookId) throw new Error("bookId is undefined");
@@ -54,15 +57,19 @@ describe("Publish", function() {
 
     it("Checks that the user purchased the book", async function () {
       const { publish, owner, otherAccount, publicClient } = await loadFixture(deployPublish);
-      await publish.write.publishBook(["Twilight", "Stephenie Meyers", "22r023r2", parseEther("1")]);
+
+      const owner_addr = getAddress(owner.account.address);
+      const author_addr = getAddress(otherAccount.account.address);
+
+      await publish.write.publishBook(["Twilight", "Stephenie Meyers", "22r023r2", author_addr, parseEther("1")]);
       const BookRegistered = await publish.getEvents.BookRegistered();
       const bookId = BookRegistered[0].args.bookId;
 
       if (!bookId) throw new Error("bookId is undefined");
 
 
-      await publish.write.purchaseBook([bookId], {
-        account: otherAccount.account.address,
+      await publish.write.purchaseBook([bookId, owner_addr], {
+        account: owner.account.address,
         value: parseEther("1")
       })
 
@@ -70,21 +77,23 @@ describe("Publish", function() {
         address: publish.address,
       })
 
-      const isPurchaser = await publish.read.checkPurchaser([bookId, otherAccount.account.address]);
+      const isPurchaser = await publish.read.checkPurchaser([bookId, owner.account.address]);
       expect(isPurchaser).to.equal(true);  
       expect(balance).to.equal(parseEther("1"))   
     }); 
 
     it("Checks to see that the book owner can withdraw funds from the contract", async function() {
       const { publish, owner, otherAccount, publicClient } = await loadFixture(deployPublish);
+      const author_addr = getAddress(otherAccount.account.address);
 
-      await publish.write.publishBook(["Twilight", "Stephenie Meyers", "22r023r2", parseEther("1")]);
+
+      await publish.write.publishBook(["Twilight", "Stephenie Meyers", "22r023r2", author_addr, parseEther("1")]);
       const BookRegistered = await publish.getEvents.BookRegistered();
       const bookId = BookRegistered[0].args.bookId;
 
       if (!bookId) throw new Error("bookId is undefined");
-      await publish.write.purchaseBook([bookId], {
-        account: otherAccount.account.address,
+      await publish.write.purchaseBook([bookId, owner.account.address], {
+        account: owner.account.address,
         value: parseEther("1")
       })
 
@@ -92,7 +101,7 @@ describe("Publish", function() {
         address: owner.account.address,
       });
 
-      await publish.write.withdrawFunds({
+      await publish.write.withdrawFunds([otherAccount.account.address], {
         account: owner.account.address,
       })
 
@@ -101,7 +110,45 @@ describe("Publish", function() {
       });
 
       const finalBalanceOwner = await publicClient.getBalance({
+        address: otherAccount.account.address,
+      });
+
+
+      expect(finalContractBalance).to.equal(parseEther("0"));
+      expect(((finalBalanceOwner - initialBalanceOwner)/initialBalanceOwner)).to.be.equal(parseEther("0"));
+
+
+    })
+
+    it("Checks to see that an unauthorized user cannot withdraw funds from the contract", async function() {
+      const { publish, owner, otherAccount, publicClient } = await loadFixture(deployPublish);
+      const author_addr = getAddress(otherAccount.account.address);
+
+
+      await publish.write.publishBook(["Twilight", "Stephenie Meyers", "22r023r2", author_addr, parseEther("1")]);
+      const BookRegistered = await publish.getEvents.BookRegistered();
+      const bookId = BookRegistered[0].args.bookId;
+
+      if (!bookId) throw new Error("bookId is undefined");
+      await publish.write.purchaseBook([bookId, owner.account.address], {
+        account: owner.account.address,
+        value: parseEther("1")
+      })
+
+      const initialBalanceOwner = await publicClient.getBalance({
         address: owner.account.address,
+      });
+
+      await publish.write.withdrawFunds([otherAccount.account.address], {
+        account: otherAccount.account.address,
+      })
+
+      const finalContractBalance = await publicClient.getBalance({
+        address: publish.address,
+      });
+
+      const finalBalanceOwner = await publicClient.getBalance({
+        address: otherAccount.account.address,
       });
 
 

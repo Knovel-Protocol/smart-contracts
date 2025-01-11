@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract PublishRegistry{
+contract PublishRegistry is ReentrancyGuard, Ownable{
 
   mapping(address => uint) public balances;
+  mapping(address => bool) public authorizedAccounts; // accounts authorized to make certain calls
+
+  error UnauthorizedAccess(address account);
+
 
   // Book metadata storage
   struct Book {
@@ -22,10 +28,50 @@ contract PublishRegistry{
   event BookRegistered(bytes32 indexed bookId, string title, string author, address author_addr, string ipfsHash, uint price); 
   event BookUpdated(bytes32 indexed bookId, string newTitle, string newIpfsHash, uint newPrice);
 
+  constructor()
+    Ownable(msg.sender){
+      authorizedAccounts[msg.sender] = true;
+  }
+
+
+  modifier onlyAuthorized() {
+     if (!authorizedAccounts[msg.sender]) {
+        revert UnauthorizedAccess(msg.sender);
+      }
+      _;
+  }
+
+
+  /**
+    @notice Accounts that are authorized to make certain calls
+    @param account: Address authorized to make certain calls
+   */
+  function addAuthorizedAccount(address account) external onlyOwner {
+      authorizedAccounts[account] = true;
+  }
+
+  /**
+    @notice Removing authorized accounts 
+    @param account: Account to be removed
+   */
+  function removeAuthorizedAccount(address account) external onlyOwner {
+    require(account != owner(), "Owner cannot remove their own authorization");
+    authorizedAccounts[account] = false;
+  }
+
+  /**
+    @notice Accounts that are authorized to make certain calls
+    @param account: Address authorized to make certain calls
+  */
+  function isThirdwebAccount(address account) internal view returns (bool) {
+      return authorizedAccounts[account];
+  }
+
   /**
     @notice Registers the book information on the blockchain
     @param _title: Title of the book
     @param _author: Public name of the author of the book
+    @param author_addr: Address of the author of the book
     @param _ipfsHash: IPFS hash of the book 
     @param _price: Price of the book
    */
@@ -33,6 +79,7 @@ contract PublishRegistry{
     string memory _title, 
     string memory _author, 
     string memory _ipfsHash, 
+    address author_addr,
     uint _price
   ) external {
 
@@ -46,42 +93,53 @@ contract PublishRegistry{
     books[bookId] = Book({
       title: _title,
       author: _author,
-      author_addr: msg.sender,
+      author_addr: author_addr,
       ipfsHash: _ipfsHash, 
       timestamp: block.timestamp, 
       price: _price
     });
 
-    bookOwners[bookId] = msg.sender;
-    emit BookRegistered(bookId, _title, _author, msg.sender, _ipfsHash, _price); 
+    bookOwners[bookId] = author_addr;
+    emit BookRegistered(bookId, _title, _author, author_addr, _ipfsHash, _price); 
   }
 
   /**
     @notice Function allows users to purchase books
     @param _bookId: bookId
+    @param buyer_addr: address of the buyer of the book 
    */
-  function purchaseBook(bytes32 _bookId) external payable{
+  function purchaseBook(bytes32 _bookId, address buyer_addr) external payable{
+    require(!purchasers[_bookId][buyer_addr], "Book already purchased by this address");
+
     Book memory book = books[_bookId]; 
     require(book.price <= msg.value, "Funds to low");
 
-    // Update the balance for the book author
-    balances[book.author_addr] += msg.value;
+    // Calculate excess funds
+    uint excess = msg.value - book.price;
 
-    purchasers[_bookId][msg.sender] = true;
+    // Update the balance for the book author
+    balances[book.author_addr] += book.price;
+    purchasers[_bookId][buyer_addr] = true;
+
+     // Refund excess funds to the buyer
+    if (excess > 0) {
+        payable(buyer_addr).transfer(excess);
+    }
   }
 
   /**
     @notice Lets the author withdraw funds for book sales
+    @param author_addr: address of the book 
    */
-  function withdrawFunds() external {
-    uint amount = balances[msg.sender];
+  function withdrawFunds(address author_addr) external nonReentrant onlyAuthorized{
+    uint amount = balances[author_addr];
     require(amount > 0, "No funds to withdraw");
     
     // Reset the balance before transferring funds
-    balances[msg.sender] = 0;
+    balances[author_addr] = 0;
 
     // Interaction: transfer funds to the author
-    payable(msg.sender).transfer(amount);
+    payable(author_addr).transfer(amount);
   }
 
   /**
@@ -111,10 +169,11 @@ contract PublishRegistry{
   /**
     @notice To delete the book info
     @param _bookId: bookId
+    @param author_addr: author of the book
   */
-  function deleteBook(bytes32 _bookId) external {
+  function deleteBook(bytes32 _bookId, address author_addr) external onlyAuthorized{
     require(bookOwners[_bookId] != address(0), "Book owner does not exist");
-    require(bookOwners[_bookId] == msg.sender, "Only author is authorized to delete this book");
+    require(bookOwners[_bookId] == author_addr, "Only author is authorized to delete this book");
 
     delete books[_bookId]; 
     delete bookOwners[_bookId];
@@ -125,16 +184,18 @@ contract PublishRegistry{
     @notice To update the book information 
     @param _bookId: bookId
     @param _newTitle: the updated title of the book being passed
+    @param author_addr: address of the author
     @param _newIpfsHash: the updated ipfsHash of the book
   */
   function updateBookInfo(
     bytes32 _bookId,
     string memory _newTitle, 
     string memory _newIpfsHash, 
+    address author_addr,
     uint _newPrice
-  ) external{
+  ) external onlyAuthorized{
       require(bookOwners[_bookId] != address(0), "Book owner does not exist");
-      require(bookOwners[_bookId] == msg.sender, "Only the author can update the book");
+      require(bookOwners[_bookId] == author_addr, "Only the author can update the book");
       require(bytes(_newTitle).length > 0, "Title cannot be empty");
       require(bytes(_newIpfsHash).length > 0, "IPFS Hash cannot be empty");
 
