@@ -10,16 +10,16 @@ const config: HardhatUserConfig = {
     sepolia: {
       url: `https://sepolia-rollup.arbitrum.io/rpc`,
       accounts: [process.env.PRIVATE_KEY ?? ''], 
-      chainId: 421614
+      chainId: 123420001114
 
     },
     camp: {
-      url: `https://rpc-campnetwork.xyz`,
+      url: `https://rpc.basecamp.t.raas.gelato.cloud`,
       accounts: [process.env.PRIVATE_KEY ?? ''], 
-      chainId: 325000
+      chainId: 123420001114
     },
     'camp-network-testnet': {
-      url: 'https://rpc.camp-network-testnet.gelato.digital'
+      url: 'https://rpc.basecamp.t.raas.gelato.cloud'
     },
   },
   etherscan: {
@@ -30,10 +30,10 @@ const config: HardhatUserConfig = {
     customChains: [
       {
         network: "camp-network-testnet",
-        chainId: 325000,
+        chainId: 123420001114,
         urls: {
           apiURL: "https://camp-network-testnet.blockscout.com/api",
-          browserURL: "https://camp-network-testnet.blockscout.com"
+          browserURL: "https://basecamp.cloud.blockscout.com/"
         }
       }
     ]
