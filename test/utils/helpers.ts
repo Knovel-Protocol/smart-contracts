@@ -1,11 +1,10 @@
-import { parseEther } from "viem";
-
 export const bookTitle = "Twilight"
 export const author_name: string = "Stephenie Meyers";
 export const hash: string = "22r023r2";
 
 export const newBookTitle = "New Moon";
 export const newBookHash: string = "22rt023r2";
+export const zeroAddress = "0x0000000000000000000000000000000000000000";
 
 export async function isAuthorized (publishContract: any, authorized: string) {
   const isAuthorized = await publishContract.read.authorizedAccounts([authorized]);
@@ -129,4 +128,20 @@ export async function withdrawFunds(publishContract: any, author: any) {
 
 export async function withdrawFundsFor(publishContract: any, author_addr: string) {
   await publishContract.write.withdrawFundsFor([author_addr])
+}
+
+export async function deleteBook(publishContract: any, bookId:string, author: any) {
+  await publishContract.write.deleteBook([bookId], {
+    account: author.account
+  });
+  const [title, authorName, publisher_addr, ipfsHash] = await getBookInfo(publishContract, bookId);
+
+  return {title, authorName, publisher_addr, ipfsHash};
+}
+
+export async function deleteBookFor(publishContract: any, bookId:string, author: any) {
+  await publishContract.write.deleteBookFor([bookId, author.account.address]);
+  const [title, authorName, publisher_addr, ipfsHash] = await getBookInfo(publishContract, bookId);
+
+  return {title, authorName, publisher_addr, ipfsHash};
 }

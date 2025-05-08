@@ -43,7 +43,6 @@ contract PublishRegistry is ReentrancyGuard, Ownable{
       authorizedAccounts[msg.sender] = true;
   }
 
-
   modifier onlyAuthorized() {
      if (!authorizedAccounts[msg.sender]) {
         revert UnauthorizedAccess(msg.sender);

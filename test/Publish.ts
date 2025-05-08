@@ -3,8 +3,8 @@ import {
   loadFixture,
 } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import { expect } from "chai";
-import { getAddress, parseEther } from "viem";
-import { author_name, bookTitle, getBookEarning, getBookEarningAuth, giftBook, hash, isAuthorized, publishBook, publishBookFor, purchaseBook, updateInfo, updateInfoFor, withdrawFunds, withdrawFundsFor } from "./utils/helpers";
+import { getAddress, parseEther, zeroAddress } from "viem";
+import { author_name, bookTitle, deleteBook, deleteBookFor, getBookEarning, getBookEarningAuth, giftBook, hash, isAuthorized, publishBook, publishBookFor, purchaseBook, updateInfo, updateInfoFor, withdrawFunds, withdrawFundsFor } from "./utils/helpers";
 
 
 describe("Publish", function() {
@@ -146,7 +146,7 @@ describe("Publish", function() {
       const expectedGain = price * 2n; // 0.01 * 2 = 0.02 ETH
       const actualGain = final_bal - initial_bal;
 
-      expect(Number(actualGain)).to.be.closeTo(Number(expectedGain), Number(parseEther("0.001")));
+      expect(Number(actualGain)).to.be.closeTo(Number(expectedGain), Number(parseEther("0.0001")));
 
     })
 
@@ -180,8 +180,7 @@ describe("Publish", function() {
       const expectedGain = price * 2n; // 0.01 * 2 = 0.02 ETH
       const actualGain = final_bal - initial_bal;
 
-      expect(Number(actualGain)).to.be.closeTo(Number(expectedGain), Number(parseEther("0.001")));
-
+      expect(Number(actualGain)).to.be.closeTo(Number(expectedGain), Number(parseEther("0.0001")));
     })
 
     it("Should allow authors to update book info", async function () {
@@ -207,89 +206,31 @@ describe("Publish", function() {
     })
 
     it("Should allow authors to delete book", async function () {
+      const { publish, author } = await loadFixture(deployPublish);
 
+      const price = parseEther("0.01");
+      const {bookId} = await publishBookFor(publish, author.account.address, price);
+
+      const {title, authorName, publisher_addr, ipfsHash} = await deleteBook(publish, bookId, author);
+
+      expect(title).to.be.empty;
+      expect(authorName).to.be.empty;
+      expect(publisher_addr).to.equal(zeroAddress);
+      expect(ipfsHash).to.be.empty;
     })
 
     it("Should allow authorized user to delete book for author", async function () {
+      const { publish, author } = await loadFixture(deployPublish);
 
-    })
+      const price = parseEther("0.01");
+      const {bookId} = await publishBookFor(publish, author.account.address, price);
 
+      const {title, authorName, publisher_addr, ipfsHash} = await deleteBookFor(publish, bookId, author);
 
-    // it("Checks to see that the book owner can withdraw funds from the contract", async function() {
-    //   const { publish, owner, otherAccount, publicClient } = await loadFixture(deployPublish);
-    //   const author_addr = getAddress(otherAccount.account.address);
-
-
-    //   await publish.write.publishBook(["Twilight", "Stephenie Meyers", "22r023r2", author_addr, parseEther("1")]);
-    //   const BookRegistered = await publish.getEvents.BookRegistered();
-    //   const bookId = BookRegistered[0].args.bookId;
-
-    //   if (!bookId) throw new Error("bookId is undefined");
-    //   await publish.write.purchaseBook([bookId, owner.account.address], {
-    //     account: owner.account.address,
-    //     value: parseEther("1")
-    //   })
-
-    //   const initialBalanceOwner = await publicClient.getBalance({
-    //     address: owner.account.address,
-    //   });
-
-    //   await publish.write.withdrawFunds([otherAccount.account.address], {
-    //     account: owner.account.address,
-    //   })
-
-    //   const finalContractBalance = await publicClient.getBalance({
-    //     address: publish.address,
-    //   });
-
-    //   const finalBalanceOwner = await publicClient.getBalance({
-    //     address: otherAccount.account.address,
-    //   });
-
-
-    //   expect(finalContractBalance).to.equal(parseEther("0"));
-    //   expect(((finalBalanceOwner - initialBalanceOwner)/initialBalanceOwner)).to.be.equal(parseEther("0"));
-
-
-    // })
-
-    // it("Checks to see that an unauthorized user cannot withdraw funds from the contract", async function() {
-    //   const { publish, owner, otherAccount, publicClient } = await loadFixture(deployPublish);
-    //   const author_addr = getAddress(otherAccount.account.address);
-
-
-    //   await publish.write.publishBook(["Twilight", "Stephenie Meyers", "22r023r2", author_addr, parseEther("1")]);
-    //   const BookRegistered = await publish.getEvents.BookRegistered();
-    //   const bookId = BookRegistered[0].args.bookId;
-
-    //   if (!bookId) throw new Error("bookId is undefined");
-    //   await publish.write.purchaseBook([bookId, owner.account.address], {
-    //     account: owner.account.address,
-    //     value: parseEther("1")
-    //   })
-
-    //   const initialBalanceOwner = await publicClient.getBalance({
-    //     address: owner.account.address,
-    //   });
-
-    //   await publish.write.withdrawFunds([otherAccount.account.address], {
-    //     account: otherAccount.account.address,
-    //   })
-
-    //   const finalContractBalance = await publicClient.getBalance({
-    //     address: publish.address,
-    //   });
-
-    //   const finalBalanceOwner = await publicClient.getBalance({
-    //     address: otherAccount.account.address,
-    //   });
-
-
-    //   expect(finalContractBalance).to.equal(parseEther("0"));
-    //   expect(((finalBalanceOwner - initialBalanceOwner)/initialBalanceOwner)).to.be.equal(parseEther("0"));
-
-
-    // })
-    
+      expect(title).to.be.empty;
+      expect(authorName).to.be.empty;
+      expect(publisher_addr).to.equal(zeroAddress);
+      expect(ipfsHash).to.be.empty;
+    })  
   })
 })
