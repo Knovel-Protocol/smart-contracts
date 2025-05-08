@@ -204,7 +204,7 @@ contract PublishRegistry is ReentrancyGuard, Ownable{
     @notice Lets the author withdraw funds for book sales
     @param author_addr: address of the book 
    */
-  function withdrawFunds(address author_addr) external nonReentrant onlyAuthorized{
+  function withdrawFundsFor(address author_addr) external nonReentrant onlyAuthorized{
     uint amount = balances[author_addr];
     require(amount > 0, "No funds to withdraw");
     
@@ -213,6 +213,20 @@ contract PublishRegistry is ReentrancyGuard, Ownable{
 
     // Interaction: transfer funds to the author
     payable(author_addr).transfer(amount);
+  }
+
+   /**
+    @notice Lets the author withdraw funds for book sales
+   */
+  function withdrawFunds() external nonReentrant {
+    uint amount = balances[msg.sender];
+    require(amount > 0, "No funds to withdraw");
+    
+    // Reset the balance before transferring funds
+    balances[msg.sender] = 0;
+
+    // Interaction: transfer funds to the author
+    payable(msg.sender).transfer(amount);
   }
 
   /**

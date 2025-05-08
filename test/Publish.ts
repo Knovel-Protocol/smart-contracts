@@ -4,7 +4,7 @@ import {
 } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import { expect } from "chai";
 import { getAddress, parseEther } from "viem";
-import { author_name, bookTitle, giftBook, hash, publishBook, publishBookFor, purchaseBook } from "./utils/helpers";
+import { author_name, bookTitle, getBookEarning, getBookEarningAuth, giftBook, hash, isAuthorized, publishBook, publishBookFor, purchaseBook, updateInfo, updateInfoFor, withdrawFunds, withdrawFundsFor } from "./utils/helpers";
 
 
 describe("Publish", function() {
@@ -36,8 +36,9 @@ describe("Publish", function() {
     it("User should publish a book", async function() {
       const { publish, authorizer } = await loadFixture(deployPublish);
       const author_addr = getAddress(authorizer.account.address);
+      const price = parseEther("0.01");
 
-      const {bookAuthor, title, authorName, ipfsHash} = await publishBook(publish);
+      const {bookAuthor, title, authorName, ipfsHash} = await publishBook(publish, price);
 
       expect(bookAuthor).to.equal(author_addr);
       
@@ -49,7 +50,8 @@ describe("Publish", function() {
     it("Authorizer should publish book on behalf of the author", async function() {
       const { publish, author } = await loadFixture(deployPublish);
 
-      const {bookAuthor_addr, title, authorName, publisher_addr, ipfsHash} = await publishBookFor(publish, author.account.address);
+      const price = parseEther("0.01");
+      const {bookAuthor_addr, title, authorName, publisher_addr, ipfsHash} = await publishBookFor(publish, author.account.address, price);
 
       expect(bookAuthor_addr).to.equal(getAddress(author.account.address));
       expect(publisher_addr).to.equal(getAddress(author.account.address));
@@ -66,11 +68,12 @@ describe("Publish", function() {
         address: publish.address,
       })
 
-      const {bookId} = await publishBook(publish);
-      const {isPurchased, balanceAfter} = await purchaseBook(publish, bookId, purchaser, publicClient);
+      const price = parseEther("0.01");
+      const {bookId} = await publishBook(publish, price);
+      const {isPurchased, balanceAfter} = await purchaseBook(publish, bookId, purchaser, publicClient, price);
 
       expect(isPurchased).to.equal(true);  
-      expect(balanceAfter - balanceBefore).to.equal(parseEther("1"))   
+      expect(balanceAfter - balanceBefore).to.equal(price)   
     })
 
     it("Should allow users to gift books to another user", async function () {
@@ -79,17 +82,138 @@ describe("Publish", function() {
       const balanceBefore = await publicClient.getBalance({
         address: publish.address,
       })
-      const {bookId} = await publishBook(publish);
-      const {balanceAfter, isPurchaserGifted, isGifteeGifted} = await giftBook(publish, bookId, giftee.account.address, purchaser, publicClient); 
 
-      expect(balanceAfter - balanceBefore).to.equal(parseEther("1"))   ;
+      const price = parseEther("0.01");
+      const {bookId} = await publishBook(publish, price);
+      const {balanceAfter, isPurchaserGifted, isGifteeGifted} = await giftBook(publish, bookId, giftee.account.address, purchaser, publicClient, price); 
+
+      expect(balanceAfter - balanceBefore).to.equal(price)   ;
       expect(isPurchaserGifted).to.equal(false);
       expect(isGifteeGifted).to.equal(true);  
     })
 
     it("Should check the total earnings that a book receives", async function() {
+      const { publish, purchaser, giftee, publicClient } = await loadFixture(deployPublish);
+
+      const balanceBefore = await publicClient.getBalance({
+        address: publish.address,
+      })
+
+      const price = parseEther("0.01");
+
+      const {bookId} = await publishBook(publish, price);
+      const {balanceAfter} = await purchaseBook(publish, bookId, purchaser, publicClient, price);
+
+      expect(balanceAfter - balanceBefore).to.equal(price);
+
+      const {balanceAfter: balanceAfterSecondPurchase} = await purchaseBook(publish, bookId, giftee, publicClient, price);
+      const {earned} = await getBookEarning(publish, bookId);
+
+      expect(balanceAfterSecondPurchase - balanceAfter).to.equal(price);
+      expect(balanceAfterSecondPurchase - balanceBefore).to.equal((price + price));
+      expect(balanceAfterSecondPurchase).to.equal(earned);
+    })
+
+    // Cannot purchase book more than once
+
+    it("Checks to see that only authors can withdraw funds from the contract", async function () {
+      //const { publish, authorizer, author, purchaser, publicClient } = await loadFixture(deployPublish);
+      const { publish, author, purchaser, giftee, publicClient } = await loadFixture(deployPublish);
+
+      const price = parseEther("0.01");
+
+      const initial_bal = await publicClient.getBalance({address: author.account.address})
+      const authorBalance = await publish.read.balances([author.account.address]);
+
+      const {bookId} = await publishBookFor(publish, author.account.address, price);
+
+      // Two people have purchased the book 
+      await purchaseBook(publish, bookId, purchaser, publicClient, price);
+      await purchaseBook(publish, bookId, giftee, publicClient, price);
+
+      const authorBalanceAfter = await publish.read.balances([author.account.address]);
+   
+      expect(authorBalanceAfter - authorBalance).to.equal(authorBalanceAfter); 
+
+      await withdrawFunds(publish, author);
+
+      const balanceAfterWithdraw = await publish.read.balances([author.account.address]);
+      
+      expect(balanceAfterWithdraw).to.equal(parseEther("0"));
+
+      const final_bal = await publicClient.getBalance({address: author.account.address, })
+
+      const expectedGain = price * 2n; // 0.01 * 2 = 0.02 ETH
+      const actualGain = final_bal - initial_bal;
+
+      expect(Number(actualGain)).to.be.closeTo(Number(expectedGain), Number(parseEther("0.001")));
 
     })
+
+    it("Checks to see that only authorized users can withdraw funds from the contract to author", async function () {
+      //const { publish, authorizer, author, purchaser, publicClient } = await loadFixture(deployPublish);
+      const { publish, author, purchaser, giftee, publicClient } = await loadFixture(deployPublish);
+
+      const price = parseEther("0.01");
+
+      const initial_bal = await publicClient.getBalance({address: author.account.address})
+      const authorBalance = await publish.read.balances([author.account.address]);
+
+      const {bookId} = await publishBookFor(publish, author.account.address, price);
+
+      // Two people have purchased the book 
+      await purchaseBook(publish, bookId, purchaser, publicClient, price);
+      await purchaseBook(publish, bookId, giftee, publicClient, price);
+
+      const authorBalanceAfter = await publish.read.balances([author.account.address]);
+   
+      expect(authorBalanceAfter - authorBalance).to.equal(authorBalanceAfter); 
+
+      await withdrawFundsFor(publish, author.account.address);
+
+      const balanceAfterWithdraw = await publish.read.balances([author.account.address]);
+      
+      expect(balanceAfterWithdraw).to.equal(parseEther("0"));
+
+      const final_bal = await publicClient.getBalance({address: author.account.address, })
+
+      const expectedGain = price * 2n; // 0.01 * 2 = 0.02 ETH
+      const actualGain = final_bal - initial_bal;
+
+      expect(Number(actualGain)).to.be.closeTo(Number(expectedGain), Number(parseEther("0.001")));
+
+    })
+
+    it("Should allow authors to update book info", async function () {
+      const { publish, author } = await loadFixture(deployPublish);
+
+      const price = parseEther("0.01");
+      const {bookId, title, ipfsHash} = await publishBookFor(publish, author.account.address, price);
+      const {title: newTitle, ipfsHash: newHash} = await updateInfo(publish, bookId, price, author);
+
+      expect(title).to.not.equal(newTitle);
+      expect(ipfsHash).to.not.equal(newHash);
+    })
+
+    it("Should allow authorized users to update book info for authors", async function () {
+      const { publish, author } = await loadFixture(deployPublish);
+
+      const price = parseEther("0.01");
+      const {bookId, title, ipfsHash} = await publishBookFor(publish, author.account.address, price);
+      const {title: newTitle, ipfsHash: newHash} = await updateInfoFor(publish, bookId, price, author.account.address);
+
+      expect(title).to.not.equal(newTitle);
+      expect(ipfsHash).to.not.equal(newHash);
+    })
+
+    it("Should allow authors to delete book", async function () {
+
+    })
+
+    it("Should allow authorized user to delete book for author", async function () {
+
+    })
+
 
     // it("Checks to see that the book owner can withdraw funds from the contract", async function() {
     //   const { publish, owner, otherAccount, publicClient } = await loadFixture(deployPublish);
