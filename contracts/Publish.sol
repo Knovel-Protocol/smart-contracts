@@ -211,7 +211,8 @@ contract PublishRegistry is ReentrancyGuard, Ownable{
     balances[author_addr] = 0;
 
     // Interaction: transfer funds to the author
-    payable(author_addr).transfer(amount);
+    (bool success, ) = payable(author_addr).call{value: amount}("");
+    require(success, "Transfer failed");
   }
 
    /**
@@ -224,8 +225,8 @@ contract PublishRegistry is ReentrancyGuard, Ownable{
     // Reset the balance before transferring funds
     balances[msg.sender] = 0;
 
-    // Interaction: transfer funds to the author
-    payable(msg.sender).transfer(amount);
+    (bool success, ) = payable(msg.sender).call{value: amount}("");
+    require(success, "Transfer failed");
   }
 
   /**
